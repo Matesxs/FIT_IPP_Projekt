@@ -1,0 +1,49 @@
+\section{Parser}
+
+
+\subsection{Základní struktura}
+
+Parsovací script se skládá z několika menších částí. \\
+1) Deklarace regexů, lookup polí \\
+2) Deklarace pomocných class (Instrukce, Argument) a funkcí \\
+3) Entrypoint programu
+
+
+\subsubsection{Pomocné funkce}
+
+Úkolem pomocných funkcí je odstranit z hlavního toku programu repetitivní celky kódu a udržet ho relativně dobře čitelný.\\
+Mezi takové patří hlavně funkce na kontrolu obsahu stringů pomocí regexů, sanitace vstupního stringu a jeho následné zpracování (např. odstranění nepotřebných znaků a převod speciálních znaků) a error handling.
+
+
+\subsubsection{Pomocné classy}
+
+Vlastní classy jsou využity na uskladnění a zpracování dat jednotlivých instrukcí před jejech výpisem na výstup. \\
+Tato část programu není úplně nejdůležitější z pohledu funkčnosti samotného parseru, ale pomáhá s formátováním a generováním dané instrukce, což by bylo o dost náročnější bez těchto pomocných class.
+
+
+\subsubsection{Entrypoint programu}
+
+Entrypoint programu obsahuje hlavní flow programu, neboli kontrolu a zpracování argumentů, načítání vstupu a jeho předzpracování jako je odstranění komentářů, znaků nového řádku a jiných bílých znaků, parsování vstupních dat na jednotlivé komponenty instrukce, kontrolo vstupních dat a následné sestavéní instrukce do požadovaného formátu, tisknutí finální instrukce na výstup a samozřejmě také error handling.
+
+
+\subsection{Argumenty programu}
+
+Momentálně jediným podporovaným argumentem je \textbf{--help} nebo \textbf{-h} pro výpis krátkého popisu programu a jeho návratových kódu.
+
+
+\subsection{Návratové hodnoty}
+
+Pokud program projde bez chyby vrací návratovou hodnotu 0, jakékoli jiné hodnoty jsou kódy erroru.\\
+1) 21 - Chybějící nebo špatný IPPcode22 header \\
+2) 22 - Neznámá nebo nevalidní operace \\
+3) 23 - Ostatní syntaktické errory
+
+
+\subsection{Flow programu}
+
+1) Kontrola a zpracování argumentů. \\
+2) Načtení jednoho řádku ze standartního vstupu a jeho sanitace. \\
+3) Header check pokud ještě nebyl nalezen. \\
+4) Rozdělení načteného řádků na jednotlivé složky podle mezery nebo tabulátoru (instrukce a argumenty). \\
+5) Kontrola argumentů podle zjištěné instrukce. \\
+6) Tisk instrukce na výstup. \\
