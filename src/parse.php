@@ -4,11 +4,7 @@ const variableRegex = "/(LF|TF|GF)@[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*/";
 const integerRegex = "/int@-?[0-9]*/";
 const identificatorRegex = "/[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*/";
 
-$types = array(
-  0 => "int",
-  1 => "string",
-  2 => "bool"
-);
+const types = array("int", "string", "bool");
 
 function checkEscapes($string)
 {
@@ -72,7 +68,7 @@ function identificatorRegex($string)
 
 function isType($string)
 {
-  foreach ($types as $type)
+  foreach (types as $type)
   {
     if ($string == $type)
       return true;

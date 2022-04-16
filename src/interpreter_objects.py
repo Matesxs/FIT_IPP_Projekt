@@ -1,36 +1,37 @@
 from enum import Enum, auto
 import re
-from typing import List, Optional
+from typing import List, Optional, Any, Tuple
+import xml.etree.ElementTree as XML
 
-from exceptions import ConversionException, InvalidFormatException
+from exceptions import *
 
 escapes=re.compile(r"\\[0-9]{3}")
 
 class InstructionKey(Enum):
-  MOVE = auto()
-  CREATEFRAME = auto()
-  PUSHFRAME = auto()
-  POPFRAME = auto()
-  DEFVAR = auto()
-  CALL = auto()
-  RETURN = auto()
-  PUSHS = auto()
-  POPS = auto()
-  ADD = auto()
-  SUB = auto()
-  MUL = auto()
-  DIV = auto()
-  IDIV = auto()
-  LT = auto()
-  GT = auto()
-  EQ = auto()
-  AND = auto()
-  OR = auto()
-  NOT = auto()
-  INT2CHAR = auto()
-  STRI2INT = auto()
-  INT2FLOAT = auto()
-  FLOAT2INT = auto()
+  MOVE = auto()#
+  CREATEFRAME = auto()#
+  PUSHFRAME = auto()#
+  POPFRAME = auto()#
+  DEFVAR = auto()#
+  CALL = auto()#
+  RETURN = auto()#
+  PUSHS = auto()#
+  POPS = auto()#
+  ADD = auto()#
+  SUB = auto()#
+  MUL = auto()#
+  DIV = auto()#
+  IDIV = auto()#
+  LT = auto()#
+  GT = auto()#
+  EQ = auto()#
+  AND = auto()#
+  OR = auto()#
+  NOT = auto()#
+  INT2CHAR = auto()#
+  STRI2INT = auto()#
+  INT2FLOAT = auto()#
+  FLOAT2INT = auto()#
   READ = auto()
   WRITE = auto()
   CONCAT = auto()
@@ -86,7 +87,9 @@ STRING_TO_INSTRUCTION = {
   "BREAK": InstructionKey.BREAK
 }
 
-class TypeKey(Enum):
+class ArgumentTypeKey(Enum):
+  TYPE = auto()
+  LABEL = auto()
   VAR = auto()
   INT = auto()
   FLOAT = auto()
@@ -94,13 +97,15 @@ class TypeKey(Enum):
   STRING = auto()
   NIL = auto()
 
-STRING_TO_TYPE = {
-  "var": TypeKey.VAR,
-  "int": TypeKey.INT,
-  "float": TypeKey.FLOAT,
-  "bool": TypeKey.BOOL,
-  "string": TypeKey.STRING,
-  "nil": TypeKey.NIL
+STRING_TO_ARGUMENT_TYPE = {
+  "type": ArgumentTypeKey.TYPE,
+  "label": ArgumentTypeKey.LABEL,
+  "var": ArgumentTypeKey.VAR,
+  "int": ArgumentTypeKey.INT,
+  "float": ArgumentTypeKey.FLOAT,
+  "bool": ArgumentTypeKey.BOOL,
+  "string": ArgumentTypeKey.STRING,
+  "nil": ArgumentTypeKey.NIL
 }
 
 class FrameTypeKey(Enum):
@@ -121,17 +126,19 @@ def dec2char(matchobj):
   return chr(dec)
 
 class Argument:
-  def __init__(self, type:TypeKey, value:str):
+  def __init__(self, type:ArgumentTypeKey, value:str):
     self.type = type
+    if value is None:
+      value = ""
 
-    if self.type == TypeKey.NIL and value == "nil":
+    if self.type == ArgumentTypeKey.NIL and value == "nil":
       self.value = None
-    elif self.type == TypeKey.INT:
+    elif self.type == ArgumentTypeKey.INT:
       try:
         self.value = int(value)
       except:
         raise ConversionException(f"Failed to convert value '{value}' to int")
-    elif self.type == TypeKey.FLOAT:
+    elif self.type == ArgumentTypeKey.FLOAT:
       try:
         self.value = float(value)
       except:
@@ -139,14 +146,20 @@ class Argument:
           self.value = float.fromhex(value)
         except:
           raise ConversionException(f"Failed to convert value '{value}' to float")
-    elif self.type == TypeKey.BOOL and (value == "true" or value == "false"):
+    elif self.type == ArgumentTypeKey.BOOL and (value == "true" or value == "false"):
       if value == "true":
         self.value = True
       else:
         self.value = False
-    elif self.type == TypeKey.STRING:
+    elif self.type == ArgumentTypeKey.STRING:
       self.value = escapes.sub(dec2char, value)
-    elif self.type == TypeKey.VAR and len(value) != 0:
+    elif self.type == ArgumentTypeKey.LABEL:
+      self.value = value
+    elif self.type == ArgumentTypeKey.TYPE:
+      if value not in ("float", "int", "bool", "string", "nil"):
+        raise InvalidFormatException(f"Argument type can't have value '{value}'")
+      self.value = STRING_TO_ARGUMENT_TYPE[value]
+    elif self.type == ArgumentTypeKey.VAR and len(value) != 0:
       amp_pos = value.find("@")
       if amp_pos == -1:
         raise InvalidFormatException(f"Can't parse string '{value}' as variable type")
@@ -164,42 +177,133 @@ class Argument:
     else:
       raise InvalidFormatException(f"Type '{self.type}' and value '{value}' is not valid combination of values")
 
-  @classmethod
-  def from_string(cls, string:str):
-    amp_pos = string.find("@")
-    if amp_pos == -1:
-      raise InvalidFormatException(f"Can't parse string '{string}' as argument")
-
-    try:
-      prefix = string[:amp_pos]
-      value = string[amp_pos + 1:]
-    except:
-      raise InvalidFormatException(f"Can't parse string '{string}' as argument")
-
-    if prefix in STRING_TO_FRAME_TYPE.keys():
-      return cls(TypeKey.VAR, string)
-    else:
-      if prefix not in STRING_TO_TYPE.keys():
-        raise ConversionException(f"'{prefix}' is not valid type of argument")
-      value_type = STRING_TO_TYPE[prefix]
-
-      return cls(value_type, value)
-
   def __repr__(self):
     return f"Argument(Type: {self.type}, Value: '{self.value}')"
 
 class Instruction:
-  __index = 0
-
-  def __init__(self, instruction: InstructionKey, arguments: Optional[List[Argument]] = None):
+  def __init__(self, instruction: InstructionKey, order:int, arguments: Optional[List[Argument]] = None):
+    self.order = order
     self.instruction = instruction
     self.arguments = arguments if arguments else []
-    self.index = Instruction.__index
 
-    Instruction.__index += 1
+  @classmethod
+  def from_element(cls, element: XML.Element):
+    if "opcode" not in element.keys() or "order" not in element.keys():
+      raise InvalidXMLStructure("Missing 'opcode' or 'order' instruction attribute")
+
+    instruction_name = element.attrib["opcode"]
+    if instruction_name not in STRING_TO_INSTRUCTION.keys():
+      raise InvalidInstruction(f"'{instruction_name}' is not valid instruction")
+
+    argument_name_list = [arg.tag for arg in element]
+    if argument_name_list.count("arg1") > 1 or argument_name_list.count("arg2") > 1 or argument_name_list.count("arg3") > 1:
+      raise InvalidXMLStructure(f"'{instruction_name}' have multiple arguments with same name")
+
+    order = element.attrib["order"]
+    if not order.isdecimal():
+      raise InvalidXMLStructure(f"'{instruction_name}' have invalid order attribute")
+
+    arguments = []
+    for argument in element:
+      if "type" not in argument.keys():
+        raise InvalidXMLStructure(f"'{argument.tag}' in instruction '{instruction_name}' don't have type attribute")
+
+      type_string = argument.attrib["type"]
+      if type_string not in STRING_TO_ARGUMENT_TYPE:
+        raise InvalidType(f"'{type_string}' is not valid type")
+
+      arguments.append(Argument(STRING_TO_ARGUMENT_TYPE[type_string], argument.text))
+
+    return cls(STRING_TO_INSTRUCTION[instruction_name], int(order), arguments)
 
   def __repr__(self):
     arguments_string = (", ".join([str(arg) for arg in self.arguments])) if self.arguments else ""
-    return f"Instruction({self.index}, {self.instruction}, [{arguments_string}])"
+    return f"Instruction({self.order}, {self.instruction}, [{arguments_string}])"
 
+class VariableTypeKey(Enum):
+  INT = auto()
+  FLOAT = auto()
+  BOOL = auto()
+  STRING = auto()
+  NIL = auto()
 
+ArgumentTypeToVariableType = {
+  ArgumentTypeKey.INT: VariableTypeKey.INT,
+  ArgumentTypeKey.FLOAT: VariableTypeKey.FLOAT,
+  ArgumentTypeKey.BOOL: VariableTypeKey.BOOL,
+  ArgumentTypeKey.STRING: VariableTypeKey.STRING,
+  ArgumentTypeKey.NIL: VariableTypeKey.NIL
+}
+
+class Variable:
+  def __init__(self, label:str):
+    self.__label = label
+
+    self.__type:Optional[VariableTypeKey] = None
+    self.__value = None
+
+  def is_initialized(self):
+    return self.__type is not None
+
+  def set_value(self, value):
+    if isinstance(value, int):
+      self.__type = VariableTypeKey.INT
+    elif isinstance(value, float):
+      self.__type = VariableTypeKey.FLOAT
+    elif isinstance(value, bool):
+      self.__type = VariableTypeKey.BOOL
+    elif isinstance(value, str):
+      self.__type = VariableTypeKey.STRING
+    elif value is None:
+      self.__type = VariableTypeKey.NIL
+    else:
+      raise InternalError(f"Invalid datatype '{type(value)}' passed to variable")
+    self.__value = value
+
+  def get_label(self):
+    return self.__label
+
+  def get_value(self) -> Tuple[VariableTypeKey, Any]:
+    return self.__type, self.__value
+
+  def __repr__(self):
+    return f"[{self.__label}:{self.__type}='{self.__value}']"
+
+class Frame:
+  def __init__(self, frame_type: FrameTypeKey):
+    self.type = frame_type # only for debug
+
+    self.variable_storage:List[Variable] = []
+
+  def __get_by_name(self, label:str):
+    for var in self.variable_storage:
+      if var.get_label() == label:
+        return var
+    return None
+
+  def __variable_exist(self, label:str) -> bool:
+    if self.__get_by_name(label) is not None: return True
+    return False
+
+  def create_variable(self, label:str):
+    if self.__variable_exist(label):
+      raise VariableRedefinition(f"Variable with name '{label}' already exists in frame of type '{self.type}'")
+    self.variable_storage.append(Variable(label))
+
+  def set_value(self, label:str, value):
+    variable = self.__get_by_name(label)
+    if variable is None:
+      raise UnknownVariable(f"Variable with name '{label}' doesn't exists in frame of type '{self.type}'")
+
+    variable.set_value(value)
+
+  def get_value(self, label:str) -> Tuple[VariableTypeKey, Any]:
+    variable = self.__get_by_name(label)
+    if variable is None:
+      raise UnknownVariable(f"Variable with name '{label}' doesn't exists in frame of type '{self.type}'")
+
+    return variable.get_value()
+
+  def __repr__(self):
+    variables = "\n\t".join([str(var) for var in self.variable_storage])
+    return f"Frame({self.type}:\n\t{variables})"
