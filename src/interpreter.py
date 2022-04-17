@@ -1,5 +1,6 @@
 import os.path
 import sys
+import xml.etree.ElementTree as XML
 
 from interpreter_objects import *
 from helpers import InputFile
@@ -265,11 +266,12 @@ if __name__ == '__main__':
 
   # Iterate over instructions in source data
   for data in source_data:
-    if data.tag != "instruction":
+    if data.tag not in ("instruction", "name", "description"):
       handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Unexpected structure '{data.tag}' in program body")
 
     # Create new instruction from element data
-    instructions.append(Instruction.from_element(data))
+    if data.tag == "instruction":
+      instructions.append(Instruction.from_element(data))
 
   # It's pointless to continue when there are no instructions
   if not instructions: sys.exit(0)
@@ -282,7 +284,11 @@ if __name__ == '__main__':
   # Extract labels
   for idx, ins in enumerate(instructions):
     if ins.instruction == InstructionKey.LABEL:
-      labels[ins.arguments[0].value] = idx
+      label_val = ins.arguments[0].value
+      if label_val in labels.keys():
+        handle_error(ErrorCodes.SEMANTIC_ERROR, f"Label '{label_val}' is already defined")
+
+      labels[label_val] = idx
 
   last_instruction_index = len(instructions) - 1
   current_instruction_index = 0

@@ -1,5 +1,6 @@
 import os
 import sys
+from errors import ErrorCodes, handle_error
 
 class InputFile:
   def __init__(self, file_path:str = None):
@@ -8,7 +9,7 @@ class InputFile:
 
     if file_path:
       if not os.path.exists(file_path) or not os.path.isfile(file_path):
-        sys.exit(11)
+        handle_error(ErrorCodes.INPUT_FILE, "Failed to open input file")
 
       with open(file_path, "r", encoding="utf-8") as f:
         self.input_file_data = f.read().split("\n")

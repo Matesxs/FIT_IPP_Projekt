@@ -191,7 +191,7 @@ class Instruction:
     if "opcode" not in element.keys() or "order" not in element.keys():
       handle_error(ErrorCodes.XML_BAD_STRUCTURE, "Missing 'opcode' or 'order' instruction attribute")
 
-    instruction_name = element.attrib["opcode"]
+    instruction_name = element.attrib["opcode"].upper()
     if instruction_name not in STRING_TO_INSTRUCTION.keys():
       handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{instruction_name}' is not valid instruction")
 
