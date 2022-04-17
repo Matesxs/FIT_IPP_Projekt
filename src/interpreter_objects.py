@@ -3,7 +3,7 @@ import re
 from typing import List, Optional, Any, Tuple
 import xml.etree.ElementTree as XML
 
-from exceptions import *
+from errors import ErrorCodes, handle_error
 
 escapes=re.compile(r"\\[0-9]{3}")
 
@@ -126,8 +126,8 @@ def dec2char(matchobj):
   return chr(dec)
 
 class Argument:
-  def __init__(self, type:ArgumentTypeKey, value:str):
-    self.type = type
+  def __init__(self, t:ArgumentTypeKey, value:str):
+    self.type = t
     if value is None:
       value = ""
 
@@ -137,7 +137,7 @@ class Argument:
       try:
         self.value = int(value)
       except:
-        raise ConversionException(f"Failed to convert value '{value}' to int")
+        handle_error(ErrorCodes.INTERN, f"Failed to convert value '{value}' to int")
     elif self.type == ArgumentTypeKey.FLOAT:
       try:
         self.value = float(value)
@@ -145,7 +145,7 @@ class Argument:
         try:
           self.value = float.fromhex(value)
         except:
-          raise ConversionException(f"Failed to convert value '{value}' to float")
+          handle_error(ErrorCodes.INTERN, f"Failed to convert value '{value}' to float")
     elif self.type == ArgumentTypeKey.BOOL and (value == "true" or value == "false"):
       if value == "true":
         self.value = True
@@ -157,25 +157,25 @@ class Argument:
       self.value = value
     elif self.type == ArgumentTypeKey.TYPE:
       if value not in ("float", "int", "bool", "string", "nil"):
-        raise InvalidFormatException(f"Argument type can't have value '{value}'")
+        handle_error(ErrorCodes.INTERN, f"Argument type can't have value '{value}'")
       self.value = STRING_TO_ARGUMENT_TYPE[value]
     elif self.type == ArgumentTypeKey.VAR and len(value) != 0:
       amp_pos = value.find("@")
       if amp_pos == -1:
-        raise InvalidFormatException(f"Can't parse string '{value}' as variable type")
+        handle_error(ErrorCodes.INTERN, f"Can't parse string '{value}' as variable type")
 
       if value[:amp_pos] not in STRING_TO_FRAME_TYPE.keys():
-        raise ConversionException(f"Value '{value[:amp_pos]}' is not valid identificator of frame")
+        handle_error(ErrorCodes.INTERN, f"Value '{value[:amp_pos]}' is not valid identificator of frame")
 
       frame_type = STRING_TO_FRAME_TYPE[value[:amp_pos]]
 
       variable_name = value[amp_pos + 1:]
       if not variable_name:
-        raise InvalidFormatException(f"String '{value}' missing variable name for parsing as variable")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"String '{value}' missing variable name for parsing as variable")
 
       self.value = (frame_type, variable_name)
     else:
-      raise InvalidFormatException(f"Type '{self.type}' and value '{value}' is not valid combination of values")
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Type '{self.type}' and value '{value}' is not valid combination of values")
 
   def __repr__(self):
     return f"Argument(Type: {self.type}, Value: '{self.value}')"
@@ -189,28 +189,28 @@ class Instruction:
   @classmethod
   def from_element(cls, element: XML.Element):
     if "opcode" not in element.keys() or "order" not in element.keys():
-      raise InvalidXMLStructure("Missing 'opcode' or 'order' instruction attribute")
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, "Missing 'opcode' or 'order' instruction attribute")
 
     instruction_name = element.attrib["opcode"]
     if instruction_name not in STRING_TO_INSTRUCTION.keys():
-      raise InvalidInstruction(f"'{instruction_name}' is not valid instruction")
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{instruction_name}' is not valid instruction")
 
     argument_name_list = [arg.tag for arg in element]
     if argument_name_list.count("arg1") > 1 or argument_name_list.count("arg2") > 1 or argument_name_list.count("arg3") > 1:
-      raise InvalidXMLStructure(f"'{instruction_name}' have multiple arguments with same name")
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{instruction_name}' have multiple arguments with same name")
 
     order = element.attrib["order"]
     if not order.isdecimal():
-      raise InvalidXMLStructure(f"'{instruction_name}' have invalid order attribute")
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{instruction_name}' have invalid order attribute")
 
     arguments = []
     for argument in element:
       if "type" not in argument.keys():
-        raise InvalidXMLStructure(f"'{argument.tag}' in instruction '{instruction_name}' don't have type attribute")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{argument.tag}' in instruction '{instruction_name}' don't have type attribute")
 
       type_string = argument.attrib["type"]
       if type_string not in STRING_TO_ARGUMENT_TYPE:
-        raise InvalidType(f"'{type_string}' is not valid type")
+        handle_error(ErrorCodes.INTERN, f"'{type_string}' is not valid type")
 
       arguments.append(Argument(STRING_TO_ARGUMENT_TYPE[type_string], argument.text))
 
@@ -257,7 +257,7 @@ class Variable:
     elif value is None:
       self.__type = VariableTypeKey.NIL
     else:
-      raise InternalError(f"Invalid datatype '{type(value)}' passed to variable")
+      handle_error(ErrorCodes.INTERN, f"Invalid datatype '{type(value)}' passed to variable")
     self.__value = value
 
   def get_label(self):
@@ -287,20 +287,20 @@ class Frame:
 
   def create_variable(self, label:str):
     if self.__variable_exist(label):
-      raise VariableRedefinition(f"Variable with name '{label}' already exists in frame of type '{self.type}'")
+      handle_error(ErrorCodes.SEMANTIC_ERROR, f"Variable with name '{label}' already exists in frame of type '{self.type}'")
     self.variable_storage.append(Variable(label))
 
   def set_value(self, label:str, value):
     variable = self.__get_by_name(label)
     if variable is None:
-      raise UnknownVariable(f"Variable with name '{label}' doesn't exists in frame of type '{self.type}'")
+      handle_error(ErrorCodes.VARIABLE_DONT_EXIST, f"Variable with name '{label}' doesn't exists in frame of type '{self.type}'")
 
     variable.set_value(value)
 
   def get_value(self, label:str) -> Tuple[VariableTypeKey, Any]:
     variable = self.__get_by_name(label)
     if variable is None:
-      raise UnknownVariable(f"Variable with name '{label}' doesn't exists in frame of type '{self.type}'")
+      handle_error(ErrorCodes.VARIABLE_DONT_EXIST, f"Variable with name '{label}' doesn't exists in frame of type '{self.type}'")
 
     return variable.get_value()
 

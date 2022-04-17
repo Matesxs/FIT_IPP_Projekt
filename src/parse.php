@@ -1,8 +1,8 @@
 <?php
 
-const variableRegex = "/(LF|TF|GF)@[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*/";
-const integerRegex = "/int@-?[0-9]*/";
-const identificatorRegex = "/[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*/";
+const variableRegex = "/^(LF|TF|GF)@[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*$/";
+const integerRegex = "/^int@-?[0-9]*$/";
+const identificatorRegex = "/^[a-zA-Z_\-$&%*!?][a-zA-Z0-9_\-$&%*!?]*$/";
 
 const types = array("int", "string", "bool");
 

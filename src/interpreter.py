@@ -17,14 +17,15 @@ def get_value_from_frames(frame_type: FrameTypeKey, label:str, global_frame:Fram
     val_type, src_val = global_frame.get_value(label)
   elif frame_type == FrameTypeKey.LOCAL:
     if len(local_frame_stack) == 0:
-      raise FrameError("Local frame doesn't exist")
+      handle_error(ErrorCodes.FRAME_DONT_EXIST, "Local frame doesn't exist")
     val_type, src_val = local_frame_stack[-1].get_value(label)
   elif frame_type == FrameTypeKey.TEMPORARY:
     if temporary_frame is None:
-      raise FrameError("Temporary frame doesn't exist")
+      handle_error(ErrorCodes.FRAME_DONT_EXIST, "Temporary frame doesn't exist")
     val_type, src_val = temporary_frame.get_value(label)
   else:
-    raise InternalError("Invalid frame indentifier")
+    handle_error(ErrorCodes.INTERN, "Invalid frame indentifier")
+    raise
 
   return val_type, src_val
 
@@ -33,14 +34,14 @@ def set_value_in_frames(frame_type: FrameTypeKey, label:str, value:Any, global_f
     global_frame.set_value(label, value)
   elif frame_type == FrameTypeKey.LOCAL:
     if len(local_frame_stack) == 0:
-      raise FrameError("Local frame doesn't exist")
+      handle_error(ErrorCodes.FRAME_DONT_EXIST, "Local frame doesn't exist")
     local_frame_stack[-1].set_value(label, value)
   elif frame_type == FrameTypeKey.TEMPORARY:
     if temporary_frame is None:
-      raise FrameError("Temporary frame doesn't exist")
+      handle_error(ErrorCodes.FRAME_DONT_EXIST, "Temporary frame doesn't exist")
     temporary_frame.set_value(label, value)
   else:
-    raise InternalError("Invalid frame indentifier")
+    handle_error(ErrorCodes.INTERN, "Invalid frame indentifier")
 
 def is_numerical(t: VariableTypeKey):
   return t in (VariableTypeKey.INT, VariableTypeKey.FLOAT)
@@ -51,100 +52,105 @@ def binary_operation(operation:InstructionKey, argument1:Argument, argument2:Arg
     frame_type, label = argument2.value
     src_val_type1, src_val1 = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
     if src_val_type1 is None:
-      raise UninitializedVariable(f"First operand of {operation} is uninitialized variable")
+      handle_error(ErrorCodes.MISSING_VALUE, f"First operand of {operation} is uninitialized variable")
   elif argument2.type != ArgumentTypeKey.LABEL:
     src_val1 = argument2.value
     try:
       src_val_type1 = ArgumentTypeToVariableType[argument2.type]
     except:
-      raise InternalError("Invalid argument type for binary operation")
+      handle_error(ErrorCodes.INTERN, "Invalid argument type for binary operation")
+      raise
   else:
-    raise InternalError("Label as argument for binary operation")
+    handle_error(ErrorCodes.INTERN, "Label as argument for binary operation")
+    raise
 
   # Load second operand
   if argument3.type == ArgumentTypeKey.VAR:
     frame_type, label = argument3.value
     src_val_type2, src_val2 = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
     if src_val_type2 is None:
-      raise UninitializedVariable(f"Second operand of {operation} is uninitialized variable")
+      handle_error(ErrorCodes.MISSING_VALUE, f"Second operand of {operation} is uninitialized variable")
   elif argument3.type != ArgumentTypeKey.LABEL:
     src_val2 = argument3.value
     try:
       src_val_type2 = ArgumentTypeToVariableType[argument3.type]
     except:
-      raise InternalError("Invalid argument type for binary operation")
+      handle_error(ErrorCodes.INTERN, "Invalid argument type for binary operation")
+      raise
   else:
-    raise InternalError("Label as argument for binary operation")
+    handle_error(ErrorCodes.INTERN, "Label as argument for binary operation")
+    raise
 
   # Perform operation
   if operation == InstructionKey.ADD:
     if not (is_numerical(src_val_type1) and is_numerical(src_val_type2)):
-      raise BadOperandType("AND need 2 numerical type operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "AND need 2 numerical type operands")
 
     src_val = src_val1 + src_val2
   elif operation == InstructionKey.SUB:
     if not (is_numerical(src_val_type1) and is_numerical(src_val_type2)):
-      raise BadOperandType("SUB need 2 numerical type operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "SUB need 2 numerical type operands")
 
     src_val = src_val1 - src_val2
   elif operation == InstructionKey.MUL:
     if not (is_numerical(src_val_type1) and is_numerical(src_val_type2)):
-      raise BadOperandType("MUL need 2 numerical type operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "MUL need 2 numerical type operands")
 
     src_val = src_val1 * src_val2
   elif operation == InstructionKey.DIV:
     if not (is_numerical(src_val_type1) and is_numerical(src_val_type2)):
-      raise BadOperandType("DIV need 2 numerical type operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "DIV need 2 numerical type operands")
 
     if src_val2 == 0:
-      raise BadOperation("Division by 0 is prohibited")
+      handle_error(ErrorCodes.BAD_OPERAND_VALUE, "Division by 0 is prohibited")
     src_val = src_val1 / src_val2
   elif operation == InstructionKey.IDIV:
     if not (is_numerical(src_val_type1) and is_numerical(src_val_type2)):
-      raise BadOperandType("IDIV need 2 numerical type operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "IDIV need 2 numerical type operands")
 
     if src_val2 == 0:
-      raise BadOperation("Division by 0 is prohibited")
+      handle_error(ErrorCodes.BAD_OPERAND_VALUE, "Division by 0 is prohibited")
     src_val = int(src_val1 // src_val2)
   elif operation == InstructionKey.LT:
     if src_val_type1 == VariableTypeKey.NIL or src_val_type2 == VariableTypeKey.NIL:
-      raise BadOperandType("LT can't be perform with operand nil")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "LT can't be perform with operand nil")
 
     src_val = src_val1 < src_val2
   elif operation == InstructionKey.GT:
     if src_val_type1 == VariableTypeKey.NIL or src_val_type2 == VariableTypeKey.NIL:
-      raise BadOperandType("GT can't be perform with operand nil")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "GT can't be perform with operand nil")
 
     src_val = src_val1 > src_val2
   elif operation == InstructionKey.EQ:
     src_val = src_val1 == src_val2
   elif operation == InstructionKey.AND:
     if src_val_type1 != VariableTypeKey.BOOL or src_val_type2 != VariableTypeKey.BOOL:
-      raise BadOperandType("AND operation can be performed only on bool operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "AND operation can be performed only on bool operands")
 
     src_val = src_val1 and src_val2
   elif operation == InstructionKey.OR:
     if src_val_type1 != VariableTypeKey.BOOL or src_val_type2 != VariableTypeKey.BOOL:
-      raise BadOperandType("OR operation can be performed only on bool operands")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "OR operation can be performed only on bool operands")
 
     src_val = src_val1 or src_val2
   elif operation == InstructionKey.STRI2INT:
     if src_val_type1 != VariableTypeKey.STRING:
-      raise BadOperandType("First operand of STRI2INT must be string")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "First operand of STRI2INT must be string")
 
     if src_val_type2 != VariableTypeKey.INT:
-      raise BadOperandType("Second operand of STRI2INT must be int")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "Second operand of STRI2INT must be int")
 
     if 0 > src_val2 >= len(src_val1):
-      raise BadStringOperation("STRI2INT invalid character index")
+      handle_error(ErrorCodes.BAD_STRING_OPERATION, "STRI2INT invalid character index")
 
     src_val = src_val1[src_val2]
   else:
-    raise InternalError("Unknown binary operation")
+    handle_error(ErrorCodes.INTERN, "Unknown binary operation")
+    raise
 
   # Set destination variable
   if argument1.type != ArgumentTypeKey.VAR:
-    raise InternalError(f"Destination for instruction {operation} must be type VAR")
+    handle_error(ErrorCodes.INTERN, f"Destination for instruction {operation} must be type VAR")
 
   frame_type, label = argument1.value
   set_value_in_frames(frame_type, label, src_val, global_frame, local_frame_stack, temporary_frame)
@@ -155,45 +161,47 @@ def unary_operation(operation:InstructionKey, argument1:Argument, argument2:Argu
     frame_type, label = argument2.value
     src_val_type, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
     if src_val_type is None:
-      raise UninitializedVariable(f"Operand of {operation} is uninitialized variable")
+      handle_error(ErrorCodes.MISSING_VALUE, f"Operand of {operation} is uninitialized variable")
   elif argument2.type != ArgumentTypeKey.LABEL:
     src_val = argument2.value
     try:
       src_val_type = ArgumentTypeToVariableType[argument2.type]
     except:
-      raise InternalError("Invalid argument type for unary operation")
+      handle_error(ErrorCodes.INTERN, "Invalid argument type for unary operation")
+      raise
   else:
-    raise InternalError("Label as argument for unary operation")
+    handle_error(ErrorCodes.INTERN, "Label as argument for unary operation")
+    raise
 
   # Perform operation
   if operation == InstructionKey.NOT:
     if src_val_type != VariableTypeKey.BOOL:
-      raise BadOperandType("NOT operation can be performed only on bool operand")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "NOT operation can be performed only on bool operand")
     src_val = not src_val
   elif operation == InstructionKey.INT2CHAR:
     if src_val_type != VariableTypeKey.INT:
-      raise BadOperandType("INT2CHAR operation can be performed only on int operand")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "INT2CHAR operation can be performed only on int operand")
 
     if not (0 <= src_val <= 0x10ffff):
-      raise BadStringOperation("Invalid value for INT2CHAR operation")
+      handle_error(ErrorCodes.BAD_STRING_OPERATION, "Invalid value for INT2CHAR operation")
 
     src_val = chr(src_val)
   elif operation == InstructionKey.INT2FLOAT:
     if src_val_type in (VariableTypeKey.INT, VariableTypeKey.FLOAT):
-      raise BadOperandType("INT2FLOAT operation can be performed only on int or float operand")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "INT2FLOAT operation can be performed only on int or float operand")
 
     src_val = float(src_val)
   elif operation == InstructionKey.FLOAT2INT:
     if src_val_type in (VariableTypeKey.INT, VariableTypeKey.FLOAT):
-      raise BadOperandType("FLOAT2INT operation can be performed only on int or float operand")
+      handle_error(ErrorCodes.BAD_OPERAND_TYPE, "FLOAT2INT operation can be performed only on int or float operand")
 
     src_val = int(src_val)
   else:
-    raise InternalError("Unknown unary operation")
+    handle_error(ErrorCodes.INTERN, "Unknown unary operation")
 
   # Set destination variable
   if argument1.type != ArgumentTypeKey.VAR:
-    raise InternalError(f"Destination for instruction {operation} must be type VAR")
+    handle_error(ErrorCodes.INTERN, f"Destination for instruction {operation} must be type VAR")
 
   frame_type, label = argument1.value
   set_value_in_frames(frame_type, label, src_val, global_frame, local_frame_stack, temporary_frame)
@@ -203,7 +211,7 @@ def print_help():
 
 if __name__ == '__main__':
   if (len(sys.argv) == 1) or (len(sys.argv) > 3):
-    sys.exit(10)
+    handle_error(ErrorCodes.BAD_ARG, "Missing arguments")
 
   source_data = None
   input_file = None
@@ -211,7 +219,7 @@ if __name__ == '__main__':
   for arg in sys.argv[1:]:
     if arg == "--help":
       if len(sys.argv) > 2:
-        sys.exit(10)
+        handle_error(ErrorCodes.BAD_ARG, "Incompatible combination of arguments")
 
       print_help()
       sys.exit(0)
@@ -219,7 +227,7 @@ if __name__ == '__main__':
     elif arg.startswith("--source=") and arg != "--source=":
       filepath = arg[arg.find("=") + 1:]
       if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        sys.exit(11)
+        handle_error(ErrorCodes.INPUT_FILE, f"Failed to locate input source file '{filepath}'")
 
       with open(filepath, "r", encoding="utf-8") as f:
         data = f.read()
@@ -227,22 +235,22 @@ if __name__ == '__main__':
         try:
           source_data = XML.fromstring(data)
         except:
-          sys.exit(31)
+          handle_error(ErrorCodes.XML_INPUT_FORMAT, "Bad format of source file")
 
     elif arg.startswith("--input=") and arg != "--input=":
       filepath = arg[arg.find("=") + 1:]
       input_file = InputFile(filepath)
     else:
-      sys.exit(10)
+      handle_error(ErrorCodes.BAD_ARG, f"Invalid argument '{arg}'")
 
   if source_data is None and input_file is None:
-    sys.exit(11)
+    handle_error(ErrorCodes.BAD_ARG, "Incompatible combination of arguments")
 
   if source_data is None:
     try:
       source_data = XML.fromstring(input())
     except:
-      sys.exit(31)
+      handle_error(ErrorCodes.XML_INPUT_FORMAT, "Bad format of source data from stdin")
 
   # If there is no input file then create empty one (connected to stdin)
   if input_file is None:
@@ -250,7 +258,7 @@ if __name__ == '__main__':
 
   # Check program header
   if source_data.tag != "program" or not "language" in source_data.keys() or source_data.attrib["language"] != "IPPcode22":
-    sys.exit(32)
+    handle_error(ErrorCodes.XML_BAD_STRUCTURE, "Missing program header")
 
   instructions:List[Instruction] = []
   labels = {}
@@ -258,7 +266,7 @@ if __name__ == '__main__':
   # Iterate over instructions in source data
   for data in source_data:
     if data.tag != "instruction":
-      sys.exit(32)
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Unexpected structure '{data.tag}' in program body")
 
     # Create new instruction from element data
     instructions.append(Instruction.from_element(data))
@@ -300,7 +308,7 @@ if __name__ == '__main__':
     ################################### PUSH FRAME #####################################
     elif current_instruction.instruction == InstructionKey.PUSHFRAME:
       if temporary_frame is None:
-        raise FrameError("Temporary frame doesn't exist and can't be pushed")
+        handle_error(ErrorCodes.FRAME_DONT_EXIST, "Temporary frame doesn't exist and can't be pushed")
 
       temporary_frame.type = FrameTypeKey.LOCAL
       local_frame_stack.append(temporary_frame)
@@ -309,7 +317,7 @@ if __name__ == '__main__':
     #################################### POP FRAME #####################################
     elif current_instruction.instruction == InstructionKey.POPFRAME:
       if len(local_frame_stack) == 0:
-        raise FrameError("Can't pop frames from epty frame stack")
+        handle_error(ErrorCodes.FRAME_DONT_EXIST, "Can't pop frames from epty frame stack")
       temporary_frame = local_frame_stack.pop()
 
     ##################################### DEFVAR #######################################
@@ -320,14 +328,14 @@ if __name__ == '__main__':
         global_frame.create_variable(label)
       elif frame_type == FrameTypeKey.LOCAL:
         if len(local_frame_stack) == 0:
-          raise FrameError("Local frame doesn't exist")
+          handle_error(ErrorCodes.FRAME_DONT_EXIST, "Local frame doesn't exist")
         local_frame_stack[-1].create_variable(label)
       elif frame_type == FrameTypeKey.TEMPORARY:
         if temporary_frame is None:
-          raise FrameError("Temporary frame doesn't exist")
+          handle_error(ErrorCodes.FRAME_DONT_EXIST, "Temporary frame doesn't exist")
         temporary_frame.create_variable(label)
       else:
-        raise InternalError("Invalid frame indentifier")
+        handle_error(ErrorCodes.INTERN, "Invalid frame indentifier")
 
     ###################################### MOVE ########################################
     elif current_instruction.instruction == InstructionKey.MOVE:
@@ -335,7 +343,7 @@ if __name__ == '__main__':
       src = current_instruction.arguments[1]
 
       if dest.type != ArgumentTypeKey.VAR:
-        raise InternalError("Destination for instruction MOVE must be type VAR")
+        handle_error(ErrorCodes.INTERN, "Destination for instruction MOVE must be type VAR")
 
       # Get source value
       if src.type == ArgumentTypeKey.VAR:
@@ -353,10 +361,10 @@ if __name__ == '__main__':
       dest = current_instruction.arguments[0]
 
       if dest.type != ArgumentTypeKey.LABEL:
-        raise InternalError("Invalid value type in CALL argument")
+        handle_error(ErrorCodes.INTERN, "Invalid value type in CALL argument")
 
       if dest.value not in labels.keys():
-        raise UndefinedLabel(f"Label '{dest.value}' is not defined")
+        handle_error(ErrorCodes.INTERN, f"Label '{dest.value}' is not defined")
 
       call_stack.append(current_instruction_index)
       current_instruction_index = labels[dest.value]
@@ -364,7 +372,7 @@ if __name__ == '__main__':
     ##################################### RETURN #######################################
     elif current_instruction.instruction == InstructionKey.RETURN:
       if len(call_stack) == 0:
-        raise CallstackError("Called RETURN on empty callstack")
+        handle_error(ErrorCodes.MISSING_VALUE, "Called RETURN on empty callstack")
 
       current_instruction_index = call_stack.pop()
 
@@ -374,19 +382,7 @@ if __name__ == '__main__':
 
       if src.type == ArgumentTypeKey.VAR:
         frame_type, label = src.value
-
-        if frame_type == FrameTypeKey.GLOBAL:
-          _, src_val = global_frame.get_value(label)
-        elif frame_type == FrameTypeKey.LOCAL:
-          if len(local_frame_stack) == 0:
-            raise FrameError("Local frame doesn't exist")
-          _, src_val = local_frame_stack[-1].get_value(label)
-        elif frame_type == FrameTypeKey.TEMPORARY:
-          if temporary_frame is None:
-            raise FrameError("Temporary frame doesn't exist")
-          _, src_val = temporary_frame.get_value(label)
-        else:
-          raise InternalError("Invalid frame indentifier")
+        _, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
       else:
         src_val = src.value
 
@@ -395,28 +391,16 @@ if __name__ == '__main__':
     ###################################### POPS ########################################
     elif current_instruction.instruction == InstructionKey.POPS:
       if len(data_stack) == 0:
-        raise DatastackError("Called POPS on empty data stack")
+        handle_error(ErrorCodes.MISSING_VALUE, "Called POPS on empty data stack")
 
       src_val = data_stack.pop()
 
       dest = current_instruction.arguments[0]
       if dest.type != ArgumentTypeKey.VAR:
-        raise InternalError("Destination for instruction POPS must be type VAR")
+        handle_error(ErrorCodes.INTERN, "Destination for instruction POPS must be type VAR")
 
       frame_type, label = dest.value
-
-      if frame_type == FrameTypeKey.GLOBAL:
-        global_frame.set_value(label, src_val)
-      elif frame_type == FrameTypeKey.LOCAL:
-        if len(local_frame_stack) == 0:
-          raise FrameError("Local frame doesn't exist")
-        local_frame_stack[-1].set_value(label, src_val)
-      elif frame_type == FrameTypeKey.TEMPORARY:
-        if temporary_frame is None:
-          raise FrameError("Temporary frame doesn't exist")
-        temporary_frame.set_value(label, src_val)
-      else:
-        raise InternalError("Invalid frame indentifier")
+      set_value_in_frames(frame_type, label, src_val, global_frame, local_frame_stack, temporary_frame)
 
     ################################### Binary ops #####################################
     elif current_instruction.instruction == InstructionKey.ADD or \
