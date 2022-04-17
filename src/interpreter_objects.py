@@ -171,11 +171,11 @@ class Argument:
 
       variable_name = value[amp_pos + 1:]
       if not variable_name:
-        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"String '{value}' missing variable name for parsing as variable")
+        handle_error(ErrorCodes.INTERN, f"String '{value}' missing variable name for parsing as variable")
 
       self.value = (frame_type, variable_name)
     else:
-      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Type '{self.type}' and value '{value}' is not valid combination of values")
+      handle_error(ErrorCodes.INTERN, f"Type '{self.type}' and value '{value}' is not valid combination of values")
 
   def __repr__(self):
     return f"Argument(Type: {self.type}, Value: '{self.value}')"
