@@ -1,6 +1,6 @@
 from enum import Enum, auto
 import re
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, Dict
 import xml.etree.ElementTree as XML
 
 from errors import ErrorCodes, handle_error
@@ -349,22 +349,20 @@ class Frame:
   def __init__(self, frame_type: FrameTypeKey):
     self.type = frame_type # only for debug
 
-    self.variable_storage:List[Variable] = []
+    self.variable_storage:Dict[str, Variable] = {}
 
   def __get_by_name(self, label:str):
-    for var in self.variable_storage:
-      if var.get_label() == label:
-        return var
-    return None
+    if not self.__variable_exist(label): return None
+    return self.variable_storage.get(label)
 
   def __variable_exist(self, label:str) -> bool:
-    if self.__get_by_name(label) is not None: return True
+    if label in self.variable_storage.keys(): return True
     return False
 
   def create_variable(self, label:str):
     if self.__variable_exist(label):
       handle_error(ErrorCodes.SEMANTIC_ERROR, f"Variable with name '{label}' already exists in frame of type '{self.type}'")
-    self.variable_storage.append(Variable(label))
+    self.variable_storage[label] = Variable(label)
 
   def set_value(self, label:str, value):
     variable = self.__get_by_name(label)
@@ -382,7 +380,7 @@ class Frame:
 
   def get_number_of_initialized_variables(self):
     cnt = 0
-    for var in self.variable_storage:
+    for var in self.variable_storage.values():
       if var.is_initialized():
         cnt += 1
 

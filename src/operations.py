@@ -4,6 +4,7 @@ from errors import ErrorCodes, handle_error
 from interpreter_objects import Argument, Frame, InstructionKey, ArgumentTypeKey, ArgumentTypeToVariableType, VariableTypeKey, Variable
 from helpers import get_value_from_frames, set_value_in_frames, is_numerical, InputFile
 
+# perform binary operation on 2 values
 def perform_binary_operation(operation: InstructionKey, src_val1, src_val_type1: VariableTypeKey, src_val2, src_val_type2: VariableTypeKey):
   if operation in (InstructionKey.ADD, InstructionKey.ADDS):
     if not (is_numerical(src_val_type1) and is_numerical(src_val_type2)):
@@ -205,6 +206,7 @@ def binary_operation(operation:InstructionKey, argument1:Argument, argument2:Arg
   frame_type, label = argument1.value
   set_value_in_frames(frame_type, label, src_val, global_frame, local_frame_stack, temporary_frame)
 
+# Perform unary operaion on value
 def perform_unary_operation(operation: InstructionKey, src_val, src_val_type: VariableTypeKey):
   if operation in (InstructionKey.NOT, InstructionKey.NOTS):
     if src_val_type != VariableTypeKey.BOOL:

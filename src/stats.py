@@ -34,6 +34,7 @@ def save_stats(stats_path:str):
     if arg in ("--hot", "--insts", "--vars"):
       args.append(arg)
 
+  # Get instruction order with most calls
   instr_order_with_max_calls = None
   max_calls = 0
   for key in instruction_calls.keys():

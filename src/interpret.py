@@ -8,7 +8,7 @@ from interpreter_objects import Instruction, InstructionKey, Frame, FrameTypeKey
 from errors import ErrorCodes, handle_error
 from helpers import InputFile, set_value_in_frames, get_value_from_frames
 from operations import unary_operation, binary_operation, handle_read_operation, stack_binary_operation, stack_unary_operation
-from stats import aggregate_stats, save_stats, get_inst_counter
+from stats import aggregate_stats, save_stats
 
 # Check if instructions don't have duplicit order values or not zero
 def check_duplicit_instruction_order_value(instructions):
@@ -115,6 +115,7 @@ if __name__ == '__main__':
   local_frame_stack:List[Frame] = []
   temporary_frame:Optional[Frame] = None
 
+  # Count total number of initialized variables
   def get_num_of_init_variables():
     global_cnt = 0
     global_cnt += global_frame.get_number_of_initialized_variables()
@@ -164,6 +165,7 @@ if __name__ == '__main__':
       if len(local_frame_stack) == 0:
         handle_error(ErrorCodes.FRAME_DONT_EXIST, "Can't pop frames from epty frame stack")
       temporary_frame = local_frame_stack.pop()
+      temporary_frame.type = FrameTypeKey.TEMPORARY
 
     ##################################### DEFVAR #######################################
     elif current_instruction.instruction == InstructionKey.DEFVAR:
@@ -214,13 +216,14 @@ if __name__ == '__main__':
 
       dest = current_instruction.arguments[0]
 
+      # Check label
       if dest.type != ArgumentTypeKey.LABEL:
         handle_error(ErrorCodes.INTERN, "Invalid value type in CALL argument")
 
       if dest.value not in labels.keys():
         handle_error(ErrorCodes.INTERN, f"Label '{dest.value}' is not defined")
 
-      call_stack.append(current_instruction_index)
+      call_stack.append(current_instruction_index) # Index is already incremented
       current_instruction_index = labels[dest.value]
 
     ##################################### RETURN #######################################
@@ -240,6 +243,7 @@ if __name__ == '__main__':
 
       src = current_instruction.arguments[0]
 
+      # Get value for data stack from variable or argument
       src_val = None
       if src.type == ArgumentTypeKey.VAR:
         frame_type, label = src.value
@@ -388,6 +392,7 @@ if __name__ == '__main__':
       operand1_type = None
       operand2_type = None
 
+      # Get operand 1
       if current_instruction.arguments[1].type == ArgumentTypeKey.VAR:
         frame_type, label = current_instruction.arguments[1].value
         operand1_type, operand1 = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
@@ -399,6 +404,7 @@ if __name__ == '__main__':
       else:
         handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{current_instruction.arguments[1].type} as argument for {current_instruction.instruction.name} instruction")
 
+      # Get operand 2
       if current_instruction.arguments[2].type == ArgumentTypeKey.VAR:
         frame_type, label = current_instruction.arguments[2].value
         operand2_type, operand2 = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
@@ -429,6 +435,7 @@ if __name__ == '__main__':
 
       src = current_instruction.arguments[0]
 
+      # Get return code
       src_val_type = src_val = None
       if src.type == ArgumentTypeKey.VAR:
         frame_type, label = src.value
@@ -458,6 +465,7 @@ if __name__ == '__main__':
 
       src = current_instruction.arguments[0]
 
+      # Get value to print
       src_val_type = src_val = None
       if src.type == ArgumentTypeKey.VAR:
         frame_type, label = src.value
@@ -470,6 +478,7 @@ if __name__ == '__main__':
       else:
         handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{src.type} as argument for EXIT instruction")
 
+      # Convert and print value
       if src_val_type == VariableTypeKey.NIL:
         sys.stderr.write("")
       elif src_val_type == VariableTypeKey.BOOL:
@@ -487,7 +496,6 @@ if __name__ == '__main__':
 
       sys.stderr.write(f"Last instruction: {last_instruction}\n")
       sys.stderr.write(f"Code position: {last_instruction.order if last_instruction is not None else 0}\n")
-      sys.stderr.write(f"Instructions executed: {get_inst_counter()}\n\n")
       sys.stderr.write(f"Global frame:\n{global_frame}\n\n")
       sys.stderr.write("Local frames:\n")
       for loc_frame in local_frame_stack:
@@ -551,6 +559,7 @@ if __name__ == '__main__':
       if label_src.value not in labels.keys():
         handle_error(ErrorCodes.SEMANTIC_ERROR, f"Label {label_src.value} is undefined")
 
+      # Get values from data stack and convert them to variables
       arg2 = Variable("arg2")
       arg2.set_value(data_stack.pop())
       arg1 = Variable("arg1")
@@ -575,7 +584,8 @@ if __name__ == '__main__':
       handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Unknown operation '{current_instruction.instruction}'")
 
     last_instruction = current_instruction
-    aggregate_stats(current_instruction, get_num_of_init_variables())
+    if arguments.stats:
+      aggregate_stats(current_instruction, get_num_of_init_variables())
 
   if arguments.stats:
     save_stats(arguments.stats)
