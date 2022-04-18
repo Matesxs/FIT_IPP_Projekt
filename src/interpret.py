@@ -2,11 +2,13 @@ import os.path
 import sys
 import xml.etree.ElementTree as XML
 from typing import List, Optional
+import argparse
 
 from interpreter_objects import Instruction, InstructionKey, Frame, FrameTypeKey, ArgumentTypeKey, ArgumentTypeToVariableType, VariableTypeKey, Variable
 from errors import ErrorCodes, handle_error
 from helpers import InputFile, set_value_in_frames, get_value_from_frames
 from operations import unary_operation, binary_operation, handle_read_operation, stack_binary_operation, stack_unary_operation
+from stats import aggregate_stats, save_stats, get_inst_counter
 
 # Check if instructions don't have duplicit order values or not zero
 def check_duplicit_instruction_order_value(instructions):
@@ -16,42 +18,44 @@ def check_duplicit_instruction_order_value(instructions):
       handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{instruction.instruction}' with zero order")
     used_order_values.append(instruction.order)
 
-def print_help():
-  print("Print some help")
+argument_parser = argparse.ArgumentParser(description="Program to interpret XML formated reprezentation of IPPCode22", add_help=False)
+argument_parser.add_argument("--help", required=False, action="store_true", help="Print help")
+argument_parser.add_argument("--source", type=str, required=False, help="Path to XML source file")
+argument_parser.add_argument("--input", type=str, required=False, help="Path to file with predefined inputs")
+argument_parser.add_argument("--stats", type=str, required=False, help="Path to stats file")
+argument_parser.add_argument("--hot", required=False, action="store_true", help="Stats flag: print order of most called instruction")
+argument_parser.add_argument("--vars", required=False, action="store_true", help="Stats flag: print maximum number of initialized variables")
+argument_parser.add_argument("--insts", required=False, action="store_true", help="Stats flag: print number of instruction calls")
 
 if __name__ == '__main__':
-  if (len(sys.argv) == 1) or (len(sys.argv) > 3):
-    handle_error(ErrorCodes.BAD_ARG, "Missing arguments")
+  arguments = argument_parser.parse_args()
+
+  if arguments.help:
+    if len(sys.argv) > 2:
+      handle_error(ErrorCodes.BAD_ARG, "Incompatible combination of arguments")
+    argument_parser.print_help()
+    sys.exit(0)
+
+  if not arguments.stats and arguments.hot:
+    handle_error(ErrorCodes.BAD_ARG, "Incompatible combination of arguments, missing stats argument")
 
   source_data = None
   input_file = None
 
-  for arg in sys.argv[1:]:
-    if arg == "--help":
-      if len(sys.argv) > 2:
-        handle_error(ErrorCodes.BAD_ARG, "Incompatible combination of arguments")
+  if arguments.input:
+    input_file = InputFile(arguments.input)
 
-      print_help()
-      sys.exit(0)
+  if arguments.source:
+    if not os.path.exists(arguments.source) or not os.path.isfile(arguments.source):
+      handle_error(ErrorCodes.INPUT_FILE, f"Failed to locate input source file '{arguments.source}'")
 
-    elif arg.startswith("--source=") and arg != "--source=":
-      filepath = arg[arg.find("=") + 1:]
-      if not os.path.exists(filepath) or not os.path.isfile(filepath):
-        handle_error(ErrorCodes.INPUT_FILE, f"Failed to locate input source file '{filepath}'")
+    with open(arguments.source, "r", encoding="utf-8") as f:
+      data = f.read()
 
-      with open(filepath, "r", encoding="utf-8") as f:
-        data = f.read()
-
-        try:
-          source_data = XML.fromstring(data)
-        except:
-          handle_error(ErrorCodes.XML_INPUT_FORMAT, "Bad format of source file")
-
-    elif arg.startswith("--input=") and arg != "--input=":
-      filepath = arg[arg.find("=") + 1:]
-      input_file = InputFile(filepath)
-    else:
-      handle_error(ErrorCodes.BAD_ARG, f"Invalid argument '{arg}'")
+      try:
+        source_data = XML.fromstring(data)
+      except:
+        handle_error(ErrorCodes.XML_INPUT_FORMAT, "Bad format of source file")
 
   if source_data is None and input_file is None:
     handle_error(ErrorCodes.BAD_ARG, "Incompatible combination of arguments")
@@ -110,6 +114,20 @@ if __name__ == '__main__':
   global_frame = Frame(FrameTypeKey.GLOBAL)
   local_frame_stack:List[Frame] = []
   temporary_frame:Optional[Frame] = None
+
+  def get_num_of_init_variables():
+    global_cnt = 0
+    global_cnt += global_frame.get_number_of_initialized_variables()
+
+    for local_frame in local_frame_stack:
+      global_cnt += local_frame.get_number_of_initialized_variables()
+
+    if temporary_frame is not None:
+      global_cnt += temporary_frame.get_number_of_initialized_variables()
+
+    return global_cnt
+
+  last_instruction:Optional[Instruction] = None
 
   while current_instruction_index <= last_instruction_index:
     current_instruction:Instruction = instructions[current_instruction_index]
@@ -429,6 +447,8 @@ if __name__ == '__main__':
       if 0 > src_val > 49:
         handle_error(ErrorCodes.BAD_OPERAND_VALUE, f"{src_val} is not valid value for EXIT operation, only int with value 0 <= x <= 49 are valid")
 
+      if arguments.stats:
+        save_stats(arguments.stats)
       sys.exit(int(src_val))
 
     ##################################### DPRINT #######################################
@@ -459,6 +479,25 @@ if __name__ == '__main__':
           sys.stderr.write("false")
       else:
         sys.stderr.write(str(src_val))
+
+    ###################################### BREAK #######################################
+    elif current_instruction.instruction == InstructionKey.BREAK:
+      if len(current_instruction.arguments) != 0:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"\n\nDebug values\nInstruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      sys.stderr.write(f"Last instruction: {last_instruction}\n")
+      sys.stderr.write(f"Code position: {last_instruction.order if last_instruction is not None else 0}\n")
+      sys.stderr.write(f"Instructions executed: {get_inst_counter()}\n\n")
+      sys.stderr.write(f"Global frame:\n{global_frame}\n\n")
+      sys.stderr.write("Local frames:\n")
+      for loc_frame in local_frame_stack:
+        sys.stderr.write(f"{loc_frame}\n")
+      sys.stderr.write("\nTemporary frame:\n")
+      if temporary_frame is not None:
+        sys.stderr.write(f"{temporary_frame}\n")
+
+      sys.stderr.write(f"\nCall stack:\n{call_stack}\n")
+      sys.stderr.write(f"Data stack:\n{data_stack}")
 
     ##################################### CLEARS #######################################
     elif current_instruction.instruction == InstructionKey.CLEARS:
@@ -533,25 +572,10 @@ if __name__ == '__main__':
         handle_error(ErrorCodes.INTERN, "Invalid operation received, expected JUMPIFEQS/JUMPIFNEQS")
 
     else:
-      pass
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Unknown operation '{current_instruction.instruction}'")
 
-  ############## DEBUG ###################
-  # print("Global frame")
-  # print(global_frame)
-  #
-  # print("Local frames")
-  # if local_frame_stack:
-  #   local_frame_stack.reverse()
-  #   for frame in local_frame_stack:
-  #     print(frame)
-  # else:
-  #   print("None")
-  #
-  # print("Temporary frame")
-  # print(temporary_frame)
-  #
-  # print("Call stack")
-  # print(call_stack)
-  #
-  # print("Data stack")
-  # print(data_stack)
+    last_instruction = current_instruction
+    aggregate_stats(current_instruction, get_num_of_init_variables())
+
+  if arguments.stats:
+    save_stats(arguments.stats)

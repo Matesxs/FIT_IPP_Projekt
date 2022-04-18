@@ -380,6 +380,14 @@ class Frame:
 
     return variable.get_value()
 
+  def get_number_of_initialized_variables(self):
+    cnt = 0
+    for var in self.variable_storage:
+      if var.is_initialized():
+        cnt += 1
+
+    return cnt
+
   def __repr__(self):
     variables = "\n\t".join([str(var) for var in self.variable_storage])
     return f"Frame({self.type}:\n\t{variables})"
