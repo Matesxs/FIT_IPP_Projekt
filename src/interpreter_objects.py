@@ -9,29 +9,36 @@ escapes=re.compile(r"\\[0-9]{3}")
 
 class InstructionKey(Enum):
   MOVE = auto()#
+
   CREATEFRAME = auto()#
   PUSHFRAME = auto()#
   POPFRAME = auto()#
+
   DEFVAR = auto()#
   CALL = auto()#
   RETURN = auto()#
   PUSHS = auto()#
   POPS = auto()#
+
   ADD = auto()#
   SUB = auto()#
   MUL = auto()#
   DIV = auto()#
   IDIV = auto()#
+
   LT = auto()#
   GT = auto()#
   EQ = auto()#
+
   AND = auto()#
   OR = auto()#
   NOT = auto()#
+
   INT2CHAR = auto()#
   STRI2INT = auto()#
   INT2FLOAT = auto()#
   FLOAT2INT = auto()#
+
   READ = auto()
   WRITE = auto()
   CONCAT = auto()
@@ -41,11 +48,39 @@ class InstructionKey(Enum):
   TYPE = auto()
   LABEL = auto()
   JUMP = auto()
+
   JUMPIFEQ = auto()
   JUMPIFNEQ = auto()
+
   EXIT = auto()
+
   DPRINT = auto()
   BREAK = auto()
+
+  # Stack operations
+  CLEARS = auto()
+
+  ADDS = auto()
+  SUBS = auto()
+  MULS = auto()
+  DIVS = auto()
+  IDIVS = auto()
+
+  LTS = auto()
+  GTS = auto()
+  EQS = auto()
+
+  ANDS = auto()
+  ORS = auto()
+  NOTS = auto()
+
+  INT2CHARS = auto()
+  STRI2INTS = auto()
+  INT2FLOATS = auto()
+  FLOAT2INTS = auto()
+
+  JUMPIFEQS = auto()
+  JUMPIFNEQS = auto()
 
 STRING_TO_INSTRUCTION = {
   "MOVE": InstructionKey.MOVE,
@@ -84,7 +119,32 @@ STRING_TO_INSTRUCTION = {
   "JUMPIFEQ": InstructionKey.JUMPIFEQ,
   "EXIT": InstructionKey.EXIT,
   "DPRINT": InstructionKey.DPRINT,
-  "BREAK": InstructionKey.BREAK
+  "BREAK": InstructionKey.BREAK,
+
+  # Stack operations
+  "CLEARS": InstructionKey.CLEARS,
+
+  "ADDS": InstructionKey.ADDS,
+  "SUBS": InstructionKey.SUBS,
+  "MULS": InstructionKey.MULS,
+  "DIVS": InstructionKey.DIVS,
+  "IDIVS": InstructionKey.IDIVS,
+
+  "LTS": InstructionKey.LTS,
+  "GTS": InstructionKey.GTS,
+  "EQS": InstructionKey.EQS,
+
+  "ANDS": InstructionKey.ANDS,
+  "ORS": InstructionKey.ORS,
+  "NOTS": InstructionKey.NOTS,
+
+  "INT2CHARS": InstructionKey.INT2CHARS,
+  "STRI2INTS": InstructionKey.STRI2INTS,
+  "INT2FLOATS": InstructionKey.INT2FLOATS,
+  "FLOAT2INTS": InstructionKey.FLOAT2INTS,
+
+  "JUMPIFEQS": InstructionKey.JUMPIFEQS,
+  "JUMPIFNEQS": InstructionKey.JUMPIFNEQS
 }
 
 class ArgumentTypeKey(Enum):
@@ -126,7 +186,8 @@ def dec2char(matchobj):
   return chr(dec)
 
 class Argument:
-  def __init__(self, t:ArgumentTypeKey, value:str):
+  def __init__(self, t:ArgumentTypeKey, value:str, idx:int):
+    self.idx = idx
     self.type = t
     if value is None:
       value = ""
@@ -137,7 +198,7 @@ class Argument:
       try:
         self.value = int(value)
       except:
-        handle_error(ErrorCodes.INTERN, f"Failed to convert value '{value}' to int")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Failed to convert value '{value}' to int")
     elif self.type == ArgumentTypeKey.FLOAT:
       try:
         self.value = float(value)
@@ -145,7 +206,7 @@ class Argument:
         try:
           self.value = float.fromhex(value)
         except:
-          handle_error(ErrorCodes.INTERN, f"Failed to convert value '{value}' to float")
+          handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Failed to convert value '{value}' to float")
     elif self.type == ArgumentTypeKey.BOOL and (value == "true" or value == "false"):
       if value == "true":
         self.value = True
@@ -157,25 +218,25 @@ class Argument:
       self.value = value
     elif self.type == ArgumentTypeKey.TYPE:
       if value not in ("float", "int", "bool", "string", "nil"):
-        handle_error(ErrorCodes.INTERN, f"Argument type can't have value '{value}'")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Argument type can't have value '{value}'")
       self.value = STRING_TO_ARGUMENT_TYPE[value]
     elif self.type == ArgumentTypeKey.VAR and len(value) != 0:
       amp_pos = value.find("@")
       if amp_pos == -1:
-        handle_error(ErrorCodes.INTERN, f"Can't parse string '{value}' as variable type")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Can't parse string '{value}' as variable type")
 
       if value[:amp_pos] not in STRING_TO_FRAME_TYPE.keys():
-        handle_error(ErrorCodes.INTERN, f"Value '{value[:amp_pos]}' is not valid identificator of frame")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Value '{value[:amp_pos]}' is not valid identificator of frame")
 
       frame_type = STRING_TO_FRAME_TYPE[value[:amp_pos]]
 
       variable_name = value[amp_pos + 1:]
       if not variable_name:
-        handle_error(ErrorCodes.INTERN, f"String '{value}' missing variable name for parsing as variable")
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"String '{value}' missing variable name for parsing as variable")
 
       self.value = (frame_type, variable_name)
     else:
-      handle_error(ErrorCodes.INTERN, f"Type '{self.type}' and value '{value}' is not valid combination of values")
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Type '{self.type}' and value '{value}' is not valid combination of values")
 
   def __repr__(self):
     return f"Argument(Type: {self.type}, Value: '{self.value}')"
@@ -204,7 +265,11 @@ class Instruction:
       handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{instruction_name}' have invalid order attribute")
 
     arguments = []
+    used_argument_indexes = []
     for argument in element:
+      if argument.tag not in ("arg1", "arg2", "arg3"):
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{argument.tag}' in instruction '{instruction_name}' is not valid argument of instruction")
+
       if "type" not in argument.keys():
         handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{argument.tag}' in instruction '{instruction_name}' don't have type attribute")
 
@@ -212,8 +277,19 @@ class Instruction:
       if type_string not in STRING_TO_ARGUMENT_TYPE:
         handle_error(ErrorCodes.INTERN, f"'{type_string}' is not valid type")
 
-      arguments.append(Argument(STRING_TO_ARGUMENT_TYPE[type_string], argument.text))
+      idx = int(argument.tag[3:])
+      if idx in used_argument_indexes:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{argument.tag}' in instruction '{instruction_name}' is already present")
 
+      used_argument_indexes.append(idx)
+      arguments.append(Argument(STRING_TO_ARGUMENT_TYPE[type_string], argument.text, idx))
+
+    # Check if there are no arg3 without arg2 or arg1 or arg2 without arg1
+    if (3 in used_argument_indexes and (2 not in used_argument_indexes or 1 not in used_argument_indexes)) or \
+      (2 in used_argument_indexes and 1 not in used_argument_indexes):
+      handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"'{instruction_name}' have invalid argument indexes")
+
+    arguments.sort(key=lambda x: x.idx)
     return cls(STRING_TO_INSTRUCTION[instruction_name], int(order), arguments)
 
   def __repr__(self):
