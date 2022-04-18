@@ -3,3 +3,4 @@ ipp22spec.pdf
 *.sh
 *.html
 .idea/
+__pycache__/
