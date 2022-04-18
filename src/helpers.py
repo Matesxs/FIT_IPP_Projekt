@@ -21,7 +21,10 @@ class InputFile:
 
   def get_line(self):
     if self.input_file_data is None:
-      return input()
+      try:
+        return input()
+      except:
+        return None
     else:
       self.input_data_file_index += 1
       if self.input_data_file_index >= len(self.input_file_data):

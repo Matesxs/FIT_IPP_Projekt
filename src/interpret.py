@@ -3,10 +3,10 @@ import sys
 import xml.etree.ElementTree as XML
 from typing import List, Optional
 
-from interpreter_objects import Instruction, InstructionKey, Frame, FrameTypeKey, ArgumentTypeKey
+from interpreter_objects import Instruction, InstructionKey, Frame, FrameTypeKey, ArgumentTypeKey, ArgumentTypeToVariableType, VariableTypeKey, Variable
 from errors import ErrorCodes, handle_error
 from helpers import InputFile, set_value_in_frames, get_value_from_frames
-from operations import unary_operation, binary_operation
+from operations import unary_operation, binary_operation, handle_read_operation, stack_binary_operation, stack_unary_operation
 
 # Check if instructions don't have duplicit order values or not zero
 def check_duplicit_instruction_order_value(instructions):
@@ -121,10 +121,16 @@ if __name__ == '__main__':
 
     ################################## CREATE FRAME ####################################
     if current_instruction.instruction == InstructionKey.CREATEFRAME:
+      if len(current_instruction.arguments) != 0:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
       temporary_frame = Frame(FrameTypeKey.TEMPORARY)
 
     ################################### PUSH FRAME #####################################
     elif current_instruction.instruction == InstructionKey.PUSHFRAME:
+      if len(current_instruction.arguments) != 0:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
       if temporary_frame is None:
         handle_error(ErrorCodes.FRAME_DONT_EXIST, "Temporary frame doesn't exist and can't be pushed")
 
@@ -134,6 +140,9 @@ if __name__ == '__main__':
 
     #################################### POP FRAME #####################################
     elif current_instruction.instruction == InstructionKey.POPFRAME:
+      if len(current_instruction.arguments) != 0:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
       if len(local_frame_stack) == 0:
         handle_error(ErrorCodes.FRAME_DONT_EXIST, "Can't pop frames from epty frame stack")
       temporary_frame = local_frame_stack.pop()
@@ -198,6 +207,9 @@ if __name__ == '__main__':
 
     ##################################### RETURN #######################################
     elif current_instruction.instruction == InstructionKey.RETURN:
+      if len(current_instruction.arguments) != 0:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
       if len(call_stack) == 0:
         handle_error(ErrorCodes.MISSING_VALUE, "Called RETURN on empty callstack")
 
@@ -210,11 +222,17 @@ if __name__ == '__main__':
 
       src = current_instruction.arguments[0]
 
+      src_val = None
       if src.type == ArgumentTypeKey.VAR:
         frame_type, label = src.value
-        _, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
-      else:
+        src_val_type, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
+        if src_val_type is None:
+          handle_error(ErrorCodes.MISSING_VALUE, f"Argument of {current_instruction.instruction} is uninitialized variable")
+      elif src.type not in (ArgumentTypeKey.LABEL, ArgumentTypeKey.TYPE):
         src_val = src.value
+        src_val_type = ArgumentTypeToVariableType[src.type]
+      else:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{src.type} as argument for PUSHS instruction")
 
       data_stack.append(src_val)
 
@@ -246,7 +264,10 @@ if __name__ == '__main__':
         current_instruction.instruction == InstructionKey.EQ or \
         current_instruction.instruction == InstructionKey.AND or \
         current_instruction.instruction == InstructionKey.OR or \
-        current_instruction.instruction == InstructionKey.STRI2INT:
+        current_instruction.instruction == InstructionKey.STRI2INT or \
+        current_instruction.instruction == InstructionKey.CONCAT or \
+        current_instruction.instruction == InstructionKey.GETCHAR or \
+        current_instruction.instruction == InstructionKey.SETCHAR:
       if len(current_instruction.arguments) != 3:
         handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
 
@@ -258,7 +279,9 @@ if __name__ == '__main__':
     elif current_instruction.instruction == InstructionKey.NOT or \
         current_instruction.instruction == InstructionKey.INT2CHAR or \
         current_instruction.instruction == InstructionKey.INT2FLOAT or \
-        current_instruction.instruction == InstructionKey.FLOAT2INT:
+        current_instruction.instruction == InstructionKey.FLOAT2INT or \
+        current_instruction.instruction == InstructionKey.STRLEN or \
+        current_instruction.instruction == InstructionKey.TYPE:
       if len(current_instruction.arguments) != 2:
         handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
 
@@ -266,37 +289,269 @@ if __name__ == '__main__':
                       current_instruction.arguments[0], current_instruction.arguments[1],
                       global_frame, local_frame_stack, temporary_frame)
 
+    ###################################### READ ########################################
     elif current_instruction.instruction == InstructionKey.READ:
       if len(current_instruction.arguments) != 2:
         handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
 
       frame_type, label = current_instruction.arguments[0].value
       input_type = current_instruction.arguments[1].value
-      if input_type == ArgumentTypeKey.NIL:
-        raise TypeError("Conversion type can't be nil")
 
+      try:
+        variable_output_type = ArgumentTypeToVariableType[input_type]
+      except:
+        handle_error(ErrorCodes.INTERN, f"Invalid type '{input_type.name}' for instruction READ")
+        raise
+
+      src_val = handle_read_operation(input_file, variable_output_type)
+      set_value_in_frames(frame_type, label, src_val, global_frame, local_frame_stack, temporary_frame)
+
+    ##################################### WRITE ########################################
+    elif current_instruction.instruction == InstructionKey.WRITE:
+      if len(current_instruction.arguments) != 1:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      src = current_instruction.arguments[0]
+
+      src_val_type = src_val = None
+      if src.type == ArgumentTypeKey.VAR:
+        frame_type, label = src.value
+        src_val_type, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
+        if src_val_type is None:
+          handle_error(ErrorCodes.MISSING_VALUE, f"Argument of {current_instruction.instruction} is uninitialized variable")
+      elif src.type not in (ArgumentTypeKey.LABEL, ArgumentTypeKey.TYPE):
+        src_val = src.value
+        src_val_type = ArgumentTypeToVariableType[src.type]
+      else:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{src.type} as argument for WRITE instruction")
+
+      if src_val_type == VariableTypeKey.NIL:
+        print("", end="")
+      elif src_val_type == VariableTypeKey.BOOL:
+        print("true" if src_val else "false", end="")
+      else:
+        print(str(src_val), end="")
+
+    ###################################### JUMP ########################################
+    elif current_instruction.instruction == InstructionKey.JUMP:
+      if len(current_instruction.arguments) != 1:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      # Check label
+      src = current_instruction.arguments[0]
+
+      if src.type != ArgumentTypeKey.LABEL:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, "Jump operation need label as first argument")
+
+      if src.value not in labels.keys():
+        handle_error(ErrorCodes.SEMANTIC_ERROR, f"Label {src.value} is undefined")
+
+      current_instruction_index = labels[src.value]
+
+    #################################### JUMPIFEQ ######################################
+    ################################### JUMPIFNEQ ######################################
+    elif current_instruction.instruction == InstructionKey.JUMPIFEQ or \
+        current_instruction.instruction == InstructionKey.JUMPIFNEQ:
+      if len(current_instruction.arguments) != 3:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      # Check label
+      label_src = current_instruction.arguments[0]
+
+      if label_src.type != ArgumentTypeKey.LABEL:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, "Jump operation need label as first argument")
+
+      if label_src.value not in labels.keys():
+        handle_error(ErrorCodes.SEMANTIC_ERROR, f"Label {label_src.value} is undefined")
+
+      # Load operands
+      operand1 = None
+      operand2 = None
+      operand1_type = None
+      operand2_type = None
+
+      if current_instruction.arguments[1].type == ArgumentTypeKey.VAR:
+        frame_type, label = current_instruction.arguments[1].value
+        operand1_type, operand1 = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
+        if operand1_type is None:
+          handle_error(ErrorCodes.MISSING_VALUE, f"Argument of {current_instruction.instruction} is uninitialized variable")
+      elif current_instruction.arguments[1].type not in (ArgumentTypeKey.LABEL, ArgumentTypeKey.TYPE):
+        operand1 = current_instruction.arguments[1].value
+        operand1_type = ArgumentTypeToVariableType[current_instruction.arguments[1].type]
+      else:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{current_instruction.arguments[1].type} as argument for {current_instruction.instruction.name} instruction")
+
+      if current_instruction.arguments[2].type == ArgumentTypeKey.VAR:
+        frame_type, label = current_instruction.arguments[2].value
+        operand2_type, operand2 = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
+        if operand2_type is None:
+          handle_error(ErrorCodes.MISSING_VALUE, f"Argument of {current_instruction.instruction} is uninitialized variable")
+      elif current_instruction.arguments[2].type not in (ArgumentTypeKey.LABEL, ArgumentTypeKey.TYPE):
+        operand2 = current_instruction.arguments[2].value
+        operand2_type = ArgumentTypeToVariableType[current_instruction.arguments[2].type]
+      else:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{current_instruction.arguments[2].type} as argument for {current_instruction.instruction.name} instruction")
+
+      if operand2_type != operand1_type and operand1_type != VariableTypeKey.NIL and operand2_type != VariableTypeKey.NIL:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"Incompatible type {operand1_type} and {operand2_type} in operation {current_instruction.instruction.name}")
+
+      if current_instruction.instruction == InstructionKey.JUMPIFEQ:
+        if operand1 == operand2:
+          current_instruction_index = labels[label_src.value]
+      elif current_instruction.instruction == InstructionKey.JUMPIFNEQ:
+        if operand1 != operand2:
+          current_instruction_index = labels[label_src.value]
+      else:
+        handle_error(ErrorCodes.INTERN, "Invalid operation received, expected JUMPIFEQ/JUMPIFNEQ")
+
+    ###################################### EXIT ########################################
+    elif current_instruction.instruction == InstructionKey.EXIT:
+      if len(current_instruction.arguments) != 1:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      src = current_instruction.arguments[0]
+
+      src_val_type = src_val = None
+      if src.type == ArgumentTypeKey.VAR:
+        frame_type, label = src.value
+        src_val_type, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
+        if src_val_type is None:
+          handle_error(ErrorCodes.MISSING_VALUE, f"Argument of {current_instruction.instruction} is uninitialized variable")
+      elif src.type not in (ArgumentTypeKey.LABEL, ArgumentTypeKey.TYPE):
+        src_val = src.value
+        src_val_type = ArgumentTypeToVariableType[src.type]
+      else:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{src.type} as argument for EXIT instruction")
+
+      if src_val_type != VariableTypeKey.INT:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{src.type} as argument for EXIT instruction")
+
+      if 0 > src_val > 49:
+        handle_error(ErrorCodes.BAD_OPERAND_VALUE, f"{src_val} is not valid value for EXIT operation, only int with value 0 <= x <= 49 are valid")
+
+      sys.exit(int(src_val))
+
+    ##################################### DPRINT #######################################
+    elif current_instruction.instruction == InstructionKey.DPRINT:
+      if len(current_instruction.arguments) != 1:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      src = current_instruction.arguments[0]
+
+      src_val_type = src_val = None
+      if src.type == ArgumentTypeKey.VAR:
+        frame_type, label = src.value
+        src_val_type, src_val = get_value_from_frames(frame_type, label, global_frame, local_frame_stack, temporary_frame)
+        if src_val_type is None:
+          handle_error(ErrorCodes.MISSING_VALUE, f"Argument of {current_instruction.instruction} is uninitialized variable")
+      elif src.type not in (ArgumentTypeKey.LABEL, ArgumentTypeKey.TYPE):
+        src_val = src.value
+        src_val_type = ArgumentTypeToVariableType[src.type]
+      else:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"{src.type} as argument for EXIT instruction")
+
+      if src_val_type == VariableTypeKey.NIL:
+        sys.stderr.write("")
+      elif src_val_type == VariableTypeKey.BOOL:
+        if src_val:
+          sys.stderr.write("true")
+        else:
+          sys.stderr.write("false")
+      else:
+        sys.stderr.write(str(src_val))
+
+    ##################################### CLEARS #######################################
+    elif current_instruction.instruction == InstructionKey.CLEARS:
+      if len(current_instruction.arguments) != 0:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      data_stack.clear()
+
+    ################################# Stack bin op #####################################
+    elif current_instruction.instruction == InstructionKey.ADDS or \
+        current_instruction.instruction == InstructionKey.SUBS or \
+        current_instruction.instruction == InstructionKey.MULS or \
+        current_instruction.instruction == InstructionKey.DIVS or \
+        current_instruction.instruction == InstructionKey.IDIVS or \
+        current_instruction.instruction == InstructionKey.LTS or \
+        current_instruction.instruction == InstructionKey.GTS or \
+        current_instruction.instruction == InstructionKey.EQS or \
+        current_instruction.instruction == InstructionKey.ANDS or \
+        current_instruction.instruction == InstructionKey.ORS or \
+        current_instruction.instruction == InstructionKey.STRI2INTS:
+      if len(data_stack) < 2:
+        handle_error(ErrorCodes.MISSING_VALUE, f"Instruction '{current_instruction.instruction}' missing arguments on data stack")
+
+      stack_binary_operation(current_instruction.instruction, data_stack)
+
+    elif current_instruction.instruction == InstructionKey.NOTS or \
+        current_instruction.instruction == InstructionKey.INT2CHARS or \
+        current_instruction.instruction == InstructionKey.INT2FLOATS or \
+        current_instruction.instruction == InstructionKey.FLOAT2INTS:
+      if len(data_stack) < 1:
+        handle_error(ErrorCodes.MISSING_VALUE, f"Instruction '{current_instruction.instruction}' missing arguments on data stack")
+
+      stack_unary_operation(current_instruction.instruction, data_stack)
+
+    #################################### JUMPIFEQS #####################################
+    ################################### JUMPIFNEQS #####################################
+    elif current_instruction.instruction == InstructionKey.JUMPIFEQS or \
+        current_instruction.instruction == InstructionKey.JUMPIFNEQS:
+      if len(current_instruction.arguments) != 1:
+        handle_error(ErrorCodes.XML_BAD_STRUCTURE, f"Instruction '{current_instruction.instruction}' incorrect number of arguments")
+
+      if len(data_stack) < 2:
+        handle_error(ErrorCodes.MISSING_VALUE, f"Instruction '{current_instruction.instruction}' missing arguments on data stack")
+
+      # Check label
+      label_src = current_instruction.arguments[0]
+
+      if label_src.type != ArgumentTypeKey.LABEL:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, "Jump operation need label as first argument")
+
+      if label_src.value not in labels.keys():
+        handle_error(ErrorCodes.SEMANTIC_ERROR, f"Label {label_src.value} is undefined")
+
+      arg2 = Variable("arg2")
+      arg2.set_value(data_stack.pop())
+      arg1 = Variable("arg1")
+      arg1.set_value(data_stack.pop())
+
+      arg2_type, arg2_val = arg2.get_value()
+      arg1_type, arg1_val = arg1.get_value()
+
+      if arg1_type != arg2_type and arg1_type != VariableTypeKey.NIL and arg2_type != VariableTypeKey.NIL:
+        handle_error(ErrorCodes.BAD_OPERAND_TYPE, f"Incompatible type {arg1_type} and {arg2_type} in operation {current_instruction.instruction.name}")
+
+      if current_instruction.instruction == InstructionKey.JUMPIFEQS:
+        if arg1_val == arg2_val:
+          current_instruction_index = labels[label_src.value]
+      elif current_instruction.instruction == InstructionKey.JUMPIFNEQS:
+        if arg1_val != arg2_val:
+          current_instruction_index = labels[label_src.value]
+      else:
+        handle_error(ErrorCodes.INTERN, "Invalid operation received, expected JUMPIFEQS/JUMPIFNEQS")
 
     else:
-      #raise InternalError(f"Invalid instruction '{current_instruction.instruction}'")
       pass
 
   ############## DEBUG ###################
-  print("Global frame")
-  print(global_frame)
-
-  print("Local frames")
-  if local_frame_stack:
-    local_frame_stack.reverse()
-    for frame in local_frame_stack:
-      print(frame)
-  else:
-    print("None")
-
-  print("Temporary frame")
-  print(temporary_frame)
-
-  print("Call stack")
-  print(call_stack)
-
-  print("Data stack")
-  print(data_stack)
+  # print("Global frame")
+  # print(global_frame)
+  #
+  # print("Local frames")
+  # if local_frame_stack:
+  #   local_frame_stack.reverse()
+  #   for frame in local_frame_stack:
+  #     print(frame)
+  # else:
+  #   print("None")
+  #
+  # print("Temporary frame")
+  # print(temporary_frame)
+  #
+  # print("Call stack")
+  # print(call_stack)
+  #
+  # print("Data stack")
+  # print(data_stack)

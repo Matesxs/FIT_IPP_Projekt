@@ -39,48 +39,48 @@ class InstructionKey(Enum):
   INT2FLOAT = auto()#
   FLOAT2INT = auto()#
 
-  READ = auto()
-  WRITE = auto()
-  CONCAT = auto()
-  STRLEN = auto()
-  GETCHAR = auto()
-  SETCHAR = auto()
-  TYPE = auto()
-  LABEL = auto()
-  JUMP = auto()
+  READ = auto()#
+  WRITE = auto()#
+  CONCAT = auto()#
+  STRLEN = auto()#
+  GETCHAR = auto()#
+  SETCHAR = auto()#
+  TYPE = auto()#
+  JUMP = auto()#
 
-  JUMPIFEQ = auto()
-  JUMPIFNEQ = auto()
+  JUMPIFEQ = auto()#
+  JUMPIFNEQ = auto()#
 
-  EXIT = auto()
+  EXIT = auto()#
+  LABEL = auto()#
 
-  DPRINT = auto()
+  DPRINT = auto()#
   BREAK = auto()
 
   # Stack operations
-  CLEARS = auto()
+  CLEARS = auto()#
 
-  ADDS = auto()
-  SUBS = auto()
-  MULS = auto()
-  DIVS = auto()
-  IDIVS = auto()
+  ADDS = auto()#
+  SUBS = auto()#
+  MULS = auto()#
+  DIVS = auto()#
+  IDIVS = auto()#
 
-  LTS = auto()
-  GTS = auto()
-  EQS = auto()
+  LTS = auto()#
+  GTS = auto()#
+  EQS = auto()#
 
-  ANDS = auto()
-  ORS = auto()
-  NOTS = auto()
+  ANDS = auto()#
+  ORS = auto()#
+  NOTS = auto()#
 
-  INT2CHARS = auto()
-  STRI2INTS = auto()
-  INT2FLOATS = auto()
-  FLOAT2INTS = auto()
+  INT2CHARS = auto()#
+  STRI2INTS = auto()#
+  INT2FLOATS = auto()#
+  FLOAT2INTS = auto()#
 
-  JUMPIFEQS = auto()
-  JUMPIFNEQS = auto()
+  JUMPIFEQS = auto()#
+  JUMPIFNEQS = auto()#
 
 STRING_TO_INSTRUCTION = {
   "MOVE": InstructionKey.MOVE,
@@ -322,12 +322,12 @@ class Variable:
     return self.__type is not None
 
   def set_value(self, value):
-    if isinstance(value, int):
+    if isinstance(value, bool):
+      self.__type = VariableTypeKey.BOOL
+    elif isinstance(value, int):
       self.__type = VariableTypeKey.INT
     elif isinstance(value, float):
       self.__type = VariableTypeKey.FLOAT
-    elif isinstance(value, bool):
-      self.__type = VariableTypeKey.BOOL
     elif isinstance(value, str):
       self.__type = VariableTypeKey.STRING
     elif value is None:
